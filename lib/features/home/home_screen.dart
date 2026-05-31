@@ -4,7 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:geolocator/geolocator.dart'; // Tambahan package geolocator
+import 'package:geolocator/geolocator.dart';
 
 import '../../core/widgets/user_avatar.dart';
 import '../../data/models/circle_member.dart';
@@ -26,7 +26,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final MapController _mapController = MapController();
   int? _lastRequestedCircleId;
 
-  // --- State Baru untuk Manajemen Data Lokasi Real-time ---
   final CircleService _circleService = CircleService();
   Timer? _locationTimer;
   Map<int, dynamic> _membersLocationData = {};
@@ -36,44 +35,38 @@ class _HomeScreenState extends State<HomeScreen> {
   final Color backgroundCream = const Color(0xFFFAF4ED);
   final Color textLight = const Color(0xFF9E8E78);
 
-  // defaultCenter awal sebelum lokasi asli ditemukan
   LatLng _myCurrentLocation = const LatLng(-6.2088, 106.8456);
 
   @override
   void initState() {
     super.initState();
 
-    // 1. Saat pertama buka halaman, langsung tembak lokasi sendiri dan ambil data teman
     _sendMyLocation();
     _fetchCircleLocations();
 
-    // 2. Menjalankan fungsi secara berkala setiap 10 detik
     _locationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _sendMyLocation(); // Kirim lokasimu ke DB
-      _fetchCircleLocations(); // Ambil lokasi teman dari DB
+      _sendMyLocation();
+      _fetchCircleLocations();
     });
   }
 
   @override
   void dispose() {
-    _locationTimer?.cancel(); // Menghentikan timer saat berpindah halaman
+    _locationTimer?.cancel();
     _mapController.dispose();
     super.dispose();
   }
 
-  // --- FUNGSI BARU: Mengambil GPS Device & Mengirim ke Backend ---
   Future<void> _sendMyLocation() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // Cek apakah GPS HP menyala
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       debugPrint('GPS mati, tidak bisa mengirim lokasi.');
       return;
     }
 
-    // Cek & Minta Izin Lokasi
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -89,23 +82,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      // Ambil Lat & Lng akurat dari GPS Device
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // Simpan koordinat ke variabel lokal untuk tombol target Map
       if (mounted) {
         setState(() {
           _myCurrentLocation = LatLng(position.latitude, position.longitude);
         });
       }
 
-      // KIRIM KE BACKEND (POST /api/location)
       await _circleService.updateMyLocation(
         position.latitude,
         position.longitude,
-        100, // Dummy persentase baterai 100%
+        100,
       );
 
       debugPrint(
@@ -163,23 +153,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final session = context.watch<SessionController>();
     final currentCircle = session.currentCircle;
     final members = session.circleMembers;
+    final myUserId = session.currentUser?.id;
 
     _requestMembersIfNeeded(session);
 
     // --- Pemrosesan Data List Marker ---
     final List<Marker> liveMarkers = [];
     for (var member in members) {
+      // Lewati diri sendiri — hanya tampilkan marker anggota LAIN
+      if (member.userId == myUserId) continue;
+
+      // Mencari data lokasi berdasarkan userId member
       final loc = _membersLocationData[member.userId];
 
       if (loc != null && loc['latitude'] != null && loc['longitude'] != null) {
-        final double lat =
-            loc['latitude'] is String
-                ? double.parse(loc['latitude'])
-                : loc['latitude'].toDouble();
-        final double lng =
-            loc['longitude'] is String
-                ? double.parse(loc['longitude'])
-                : loc['longitude'].toDouble();
+        final double lat = double.tryParse(loc['latitude'].toString()) ?? 0.0;
+        final double lng = double.tryParse(loc['longitude'].toString()) ?? 0.0;
         final bool isOnline = loc['status'] == 'online';
 
         liveMarkers.add(
@@ -236,13 +225,13 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: backgroundCream,
       body: Stack(
         children: [
+          // --- Peta Full Screen ---
           Positioned.fill(
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter:
-                    _myCurrentLocation, // Menggunakan lokasi saat ini
-                initialZoom: 11,
+                initialCenter: _myCurrentLocation,
+                initialZoom: 14,
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all,
                 ),
@@ -253,6 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   userAgentPackageName: 'com.wheretf.app',
                   maxZoom: 19,
                 ),
+                // --- MarkerLayer wajib ada agar marker anggota muncul ---
                 MarkerLayer(markers: liveMarkers),
               ],
             ),
@@ -406,7 +396,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMyLocationButton() {
     return GestureDetector(
       onTap: () {
-        // Sekarang tombol ini akan menyorot petanya ke lokasimu yang asli
         _mapController.move(_myCurrentLocation, 14.5);
       },
       child: Container(
