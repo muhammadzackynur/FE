@@ -3,27 +3,47 @@ import '../models/circle_summary.dart';
 import 'api_client.dart';
 
 class CircleActionResult {
-  const CircleActionResult({
-    required this.message,
-    required this.circle,
-  });
+  const CircleActionResult({required this.message, required this.circle});
 
   final String message;
   final CircleSummary circle;
 }
 
 class CircleService {
-  CircleService({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient();
+  CircleService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
+
+  // --- FUNGSI BARU: Mengirim lokasi perangkat saat ini ke backend ---
+  Future<void> updateMyLocation(
+    double latitude,
+    double longitude,
+    int battery,
+  ) async {
+    await _apiClient.post(
+      '/location',
+      body: {'latitude': latitude, 'longitude': longitude, 'battery': battery},
+      requiresAuth: true,
+    );
+  }
+
+  // --- FUNGSI BARU: Mengambil seluruh data lokasi anggota di satu circle ---
+  Future<List<dynamic>> getCircleLocations(int circleId) async {
+    final response = await _apiClient.get(
+      '/circles/$circleId/locations',
+      requiresAuth: true,
+    );
+
+    if (response['data'] is List) {
+      return response['data'];
+    }
+    return [];
+  }
 
   Future<CircleActionResult> joinCircle(String referalCode) async {
     final response = await _apiClient.post(
       '/circles/join',
-      body: {
-        'referal_code': referalCode,
-      },
+      body: {'referal_code': referalCode},
       requiresAuth: true,
     );
 
@@ -46,7 +66,8 @@ class CircleService {
       requiresAuth: true,
     );
 
-    final rawMembers = _extractMembersList(response['data']) ??
+    final rawMembers =
+        _extractMembersList(response['data']) ??
         _extractMembersList(response['members']) ??
         _extractMembersList(response);
     if (rawMembers is! List) {
@@ -57,9 +78,7 @@ class CircleService {
         .whereType<Map>()
         .map(
           (item) => CircleMember.fromJson(
-            item.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ),
+            item.map((key, value) => MapEntry(key.toString(), value)),
           ),
         )
         .toList();
@@ -89,7 +108,8 @@ class CircleService {
   }
 
   CircleActionResult _parseResult(Map<String, dynamic> response) {
-    final rawData = _extractCircleMap(response['data']) ??
+    final rawData =
+        _extractCircleMap(response['data']) ??
         _extractCircleMap(response['circle']) ??
         _extractCircleMap(response);
 
@@ -109,7 +129,8 @@ class CircleService {
       return null;
     }
 
-    final nestedCircle = _asMap(map['circle']) ??
+    final nestedCircle =
+        _asMap(map['circle']) ??
         _asMap(map['current_circle']) ??
         _asMap(map['active_circle']);
 
@@ -130,9 +151,7 @@ class CircleService {
     }
 
     if (value is Map) {
-      return value.map(
-        (key, item) => MapEntry(key.toString(), item),
-      );
+      return value.map((key, item) => MapEntry(key.toString(), item));
     }
 
     return null;

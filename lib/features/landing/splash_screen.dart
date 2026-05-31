@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart'; // Tambahkan ini
+import 'package:permission_handler/permission_handler.dart'; // Tambahkan ini
 
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/custom_widgets.dart';
@@ -24,7 +26,27 @@ class _SplashScreenState extends State<SplashScreen> {
     });
   }
 
+  // Fungsi untuk meminta izin lokasi
+  Future<void> _checkPermissions() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      // Jika GPS mati, minta user menyalakan
+      await Geolocator.openLocationSettings();
+      // Tunggu user menyalakan, atau beri jeda
+      await Future.delayed(const Duration(seconds: 3));
+    }
+
+    PermissionStatus permission = await Permission.location.request();
+    if (permission.isDenied || permission.isPermanentlyDenied) {
+      // Jika ditolak, Anda bisa menampilkan dialog penjelasan di sini
+      debugPrint("Izin lokasi ditolak oleh user");
+    }
+  }
+
   Future<void> _bootstrapSession() async {
+    // 1. Minta Izin Lokasi dulu sebelum memproses sesi login
+    await _checkPermissions();
+
     await Future<void>.delayed(const Duration(seconds: 1));
 
     if (!mounted) {
@@ -39,8 +61,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) =>
-            isLoggedIn ? const MainNavigationScreen() : const WelcomeScreen(),
+        builder:
+            (_) =>
+                isLoggedIn
+                    ? const MainNavigationScreen()
+                    : const WelcomeScreen(),
       ),
     );
   }
@@ -101,9 +126,7 @@ class _SplashScreenState extends State<SplashScreen> {
             right: 0,
             child: SizedBox(
               height: 150,
-              child: CustomPaint(
-                painter: ConstellationPainter(),
-              ),
+              child: CustomPaint(painter: ConstellationPainter()),
             ),
           ),
         ],

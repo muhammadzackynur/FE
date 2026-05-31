@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/models/circle_member.dart';
 import '../../data/models/circle_summary.dart';
+import '../../data/services/circle_service.dart';
 import '../../state/session_controller.dart';
 import '../circle/join_circle_screen.dart';
 import '../profile/profile_screen.dart';
@@ -23,6 +25,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final MapController _mapController = MapController();
   int? _lastRequestedCircleId;
 
+  // --- State Baru untuk Manajemen Data Lokasi Real-time ---
+  final CircleService _circleService = CircleService();
+  Timer? _locationTimer;
+  Map<int, dynamic> _membersLocationData = {};
+
   final Color darkBrown = const Color(0xFF5B4D41);
   final Color lightCream = const Color(0xFFF7F2EB);
   final Color backgroundCream = const Color(0xFFFAF4ED);
@@ -30,37 +37,138 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final LatLng defaultCenter = const LatLng(-6.2088, 106.8456);
 
+  @override
+  void initState() {
+    super.initState();
+    // Menjalankan pengambilan data secara berkala setiap 10 detik
+    _locationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _fetchCircleLocations();
+    });
+  }
+
+  @override
+  void dispose() {
+    _locationTimer?.cancel(); // Menghentikan timer saat berpindah halaman
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchCircleLocations() async {
+    final session = context.read<SessionController>();
+    final circleId = session.currentCircle?.id;
+    if (circleId == null) return;
+
+    try {
+      final locations = await _circleService.getCircleLocations(circleId);
+
+      if (mounted) {
+        setState(() {
+          _membersLocationData = {
+            // Memastikan key berupa int agar cocok saat pencarian member.userId
+            for (var loc in locations)
+              int.parse(loc['user_id'].toString()): loc,
+          };
+        });
+      }
+    } catch (e) {
+      debugPrint('Gagal memuat lokasi real-time: $e');
+    }
+  }
+
   void _showCreateUnavailable() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Create circle belum tersedia di backend.'),
-      ),
+      const SnackBar(content: Text('Create circle belum tersedia di backend.')),
     );
   }
 
   Future<void> _goToJoinCircle() async {
     final message = await Navigator.push<String>(
       context,
-      MaterialPageRoute(
-        builder: (_) => const JoinCircleScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const JoinCircleScreen()),
     );
 
     if (!mounted || message == null || message.isEmpty) {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
     final currentCircle = session.currentCircle;
+    final members = session.circleMembers;
 
     _requestMembersIfNeeded(session);
+
+    // --- Pemrosesan Data List Marker ---
+    final List<Marker> liveMarkers = [];
+    for (var member in members) {
+      final loc = _membersLocationData[member.userId];
+
+      if (loc != null && loc['latitude'] != null && loc['longitude'] != null) {
+        final double lat =
+            loc['latitude'] is String
+                ? double.parse(loc['latitude'])
+                : loc['latitude'].toDouble();
+        final double lng =
+            loc['longitude'] is String
+                ? double.parse(loc['longitude'])
+                : loc['longitude'].toDouble();
+        final bool isOnline = loc['status'] == 'online';
+
+        liveMarkers.add(
+          Marker(
+            point: LatLng(lat, lng),
+            width: 50,
+            height: 60,
+            alignment: Alignment.topCenter,
+            child: GestureDetector(
+              onTap: () => _openMemberHistory(member),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isOnline ? const Color(0xFF67A843) : Colors.grey,
+                        width: 2.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: UserAvatar(
+                      user: member.user,
+                      radius: 18,
+                      backgroundColor:
+                          member.hasOwnerRole
+                              ? const Color(0xFFD8B36A)
+                              : const Color(0xFF8FC7D4),
+                      foregroundColor: darkBrown,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_drop_down,
+                    color: Colors.black87,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    }
 
     return Scaffold(
       backgroundColor: backgroundCream,
@@ -82,20 +190,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   userAgentPackageName: 'com.wheretf.app',
                   maxZoom: 19,
                 ),
+                // --- Menampilkan Titik Lokasi Pengguna ---
+                MarkerLayer(markers: liveMarkers),
               ],
             ),
           ),
-          Positioned(
-            top: 50,
-            left: 16,
-            right: 16,
-            child: _buildTopBar(),
-          ),
-          Positioned(
-            right: 16,
-            bottom: 245,
-            child: _buildMyLocationButton(),
-          ),
+          Positioned(top: 50, left: 16, right: 16, child: _buildTopBar()),
+          Positioned(right: 16, bottom: 245, child: _buildMyLocationButton()),
           DraggableScrollableSheet(
             initialChildSize: 0.42,
             minChildSize: 0.23,
@@ -168,9 +269,9 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      context
-          .read<SessionController>()
-          .refreshCircleMembers(allowFailure: true);
+      context.read<SessionController>().refreshCircleMembers(
+        allowFailure: true,
+      );
     });
   }
 
@@ -213,26 +314,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: darkBrown,
-            size: 22,
-          ),
+          Icon(Icons.keyboard_arrow_down_rounded, color: darkBrown, size: 22),
           const Spacer(),
-          Icon(
-            Icons.notifications,
-            color: darkBrown,
-            size: 22,
-          ),
+          Icon(Icons.notifications, color: darkBrown, size: 22),
           const SizedBox(width: 14),
           GestureDetector(
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const ProfileScreen(
-                    showBackButton: true,
-                  ),
+                  builder: (_) => const ProfileScreen(showBackButton: true),
                 ),
               );
             },
@@ -269,11 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        child: const Icon(
-          Icons.my_location,
-          color: Colors.white,
-          size: 22,
-        ),
+        child: const Icon(Icons.my_location, color: Colors.white, size: 22),
       ),
     );
   }
@@ -292,10 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 76,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFD7B58C),
-                width: 1.3,
-              ),
+              border: Border.all(color: const Color(0xFFD7B58C), width: 1.3),
             ),
             child: Center(
               child: SizedBox(
@@ -303,18 +387,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    Positioned(
-                      left: 0,
-                      child: _smallEmptyAvatar(),
-                    ),
-                    Positioned(
-                      left: 14,
-                      child: _smallEmptyAvatar(),
-                    ),
-                    Positioned(
-                      left: 28,
-                      child: _smallEmptyAvatar(),
-                    ),
+                    Positioned(left: 0, child: _smallEmptyAvatar()),
+                    Positioned(left: 14, child: _smallEmptyAvatar()),
+                    Positioned(left: 28, child: _smallEmptyAvatar()),
                   ],
                 ),
               ),
@@ -401,22 +476,16 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 8),
           Text(
             'Invite code: ${currentCircle.referalCode}',
-            style: GoogleFonts.inter(
-              color: textLight,
-              fontSize: 13,
-            ),
+            style: GoogleFonts.inter(color: textLight, fontSize: 13),
           ),
           const SizedBox(height: 6),
           Text(
             currentCircle.isOwnedBy(
-              context.read<SessionController>().currentUser?.id,
-            )
+                  context.read<SessionController>().currentUser?.id,
+                )
                 ? 'This is your default circle.'
                 : "You are active in another member's circle.",
-            style: GoogleFonts.inter(
-              color: textLight,
-              fontSize: 12,
-            ),
+            style: GoogleFonts.inter(color: textLight, fontSize: 12),
           ),
           const SizedBox(height: 18),
           SizedBox(
@@ -453,10 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFD8D0C6),
         shape: BoxShape.circle,
-        border: Border.all(
-          color: lightCream,
-          width: 2,
-        ),
+        border: Border.all(color: lightCream, width: 2),
       ),
     );
   }
@@ -484,16 +550,13 @@ class _HomeScreenState extends State<HomeScreen> {
             if (currentCircle != null)
               IconButton(
                 visualDensity: VisualDensity.compact,
-                onPressed: session.isLoadingCircleMembers
-                    ? null
-                    : () => context
-                        .read<SessionController>()
-                        .refreshCircleMembers(allowFailure: true),
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  color: textLight,
-                  size: 20,
-                ),
+                onPressed:
+                    session.isLoadingCircleMembers
+                        ? null
+                        : () => context
+                            .read<SessionController>()
+                            .refreshCircleMembers(allowFailure: true),
+                icon: Icon(Icons.refresh_rounded, color: textLight, size: 20),
                 tooltip: 'Refresh anggota',
               ),
           ],
@@ -505,36 +568,30 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFFE4D6C7),
-              width: 1,
-            ),
+            border: Border.all(color: const Color(0xFFE4D6C7), width: 1),
           ),
-          child: currentCircle == null
-              ? _buildPeopleMessage('No synced circle yet')
-              : session.isLoadingCircleMembers && members.isEmpty
-                      ? _buildPeopleLoading()
-                      : error != null
-                          ? _buildPeopleError(error)
-                          : members.isEmpty
-                              ? _buildPeopleMessage(
-                                  'Belum ada anggota di circle ini',
-                                )
-                          : Column(
-                              children: [
-                                for (int index = 0;
-                                    index < members.length;
-                                    index++) ...[
-                                  _buildMemberRow(members[index]),
-                                  if (index != members.length - 1)
-                                    const Divider(
-                                      height: 1,
-                                      indent: 74,
-                                      color: Color(0xFFE4D6C7),
-                                    ),
-                                ],
-                              ],
-                            ),
+          child:
+              currentCircle == null
+                  ? _buildPeopleMessage('No synced circle yet')
+                  : session.isLoadingCircleMembers && members.isEmpty
+                  ? _buildPeopleLoading()
+                  : error != null
+                  ? _buildPeopleError(error)
+                  : members.isEmpty
+                  ? _buildPeopleMessage('Belum ada anggota di circle ini')
+                  : Column(
+                    children: [
+                      for (int index = 0; index < members.length; index++) ...[
+                        _buildMemberRow(members[index]),
+                        if (index != members.length - 1)
+                          const Divider(
+                            height: 1,
+                            indent: 74,
+                            color: Color(0xFFE4D6C7),
+                          ),
+                      ],
+                    ],
+                  ),
         ),
       ],
     );
@@ -554,10 +611,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 12),
           Text(
             'Memuat anggota...',
-            style: GoogleFonts.inter(
-              color: textLight,
-              fontSize: 13,
-            ),
+            style: GoogleFonts.inter(color: textLight, fontSize: 13),
           ),
         ],
       ),
@@ -620,9 +674,10 @@ class _HomeScreenState extends State<HomeScreen> {
               user: member.user,
               initials: member.initials,
               radius: 26,
-              backgroundColor: member.hasOwnerRole
-                  ? const Color(0xFFD8B36A)
-                  : const Color(0xFF8FC7D4),
+              backgroundColor:
+                  member.hasOwnerRole
+                      ? const Color(0xFFD8B36A)
+                      : const Color(0xFF8FC7D4),
               foregroundColor: darkBrown,
               fontSize: 18,
             ),
@@ -656,11 +711,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: textLight,
-              size: 22,
-            ),
+            Icon(Icons.chevron_right_rounded, color: textLight, size: 22),
           ],
         ),
       ),
