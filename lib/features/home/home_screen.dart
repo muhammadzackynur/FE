@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart'; // Tambahan package geolocator
 
 import '../../core/widgets/user_avatar.dart';
 import '../../data/models/circle_member.dart';
@@ -35,14 +36,21 @@ class _HomeScreenState extends State<HomeScreen> {
   final Color backgroundCream = const Color(0xFFFAF4ED);
   final Color textLight = const Color(0xFF9E8E78);
 
-  final LatLng defaultCenter = const LatLng(-6.2088, 106.8456);
+  // defaultCenter awal sebelum lokasi asli ditemukan
+  LatLng _myCurrentLocation = const LatLng(-6.2088, 106.8456);
 
   @override
   void initState() {
     super.initState();
-    // Menjalankan pengambilan data secara berkala setiap 10 detik
+
+    // 1. Saat pertama buka halaman, langsung tembak lokasi sendiri dan ambil data teman
+    _sendMyLocation();
+    _fetchCircleLocations();
+
+    // 2. Menjalankan fungsi secara berkala setiap 10 detik
     _locationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _fetchCircleLocations();
+      _sendMyLocation(); // Kirim lokasimu ke DB
+      _fetchCircleLocations(); // Ambil lokasi teman dari DB
     });
   }
 
@@ -51,6 +59,61 @@ class _HomeScreenState extends State<HomeScreen> {
     _locationTimer?.cancel(); // Menghentikan timer saat berpindah halaman
     _mapController.dispose();
     super.dispose();
+  }
+
+  // --- FUNGSI BARU: Mengambil GPS Device & Mengirim ke Backend ---
+  Future<void> _sendMyLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // Cek apakah GPS HP menyala
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      debugPrint('GPS mati, tidak bisa mengirim lokasi.');
+      return;
+    }
+
+    // Cek & Minta Izin Lokasi
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        debugPrint('Izin lokasi ditolak.');
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      debugPrint('Izin lokasi ditolak permanen.');
+      return;
+    }
+
+    try {
+      // Ambil Lat & Lng akurat dari GPS Device
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Simpan koordinat ke variabel lokal untuk tombol target Map
+      if (mounted) {
+        setState(() {
+          _myCurrentLocation = LatLng(position.latitude, position.longitude);
+        });
+      }
+
+      // KIRIM KE BACKEND (POST /api/location)
+      await _circleService.updateMyLocation(
+        position.latitude,
+        position.longitude,
+        100, // Dummy persentase baterai 100%
+      );
+
+      debugPrint(
+        'Berhasil kirim lokasi ke DB: ${position.latitude}, ${position.longitude}',
+      );
+    } catch (e) {
+      debugPrint('Gagal mengirim lokasi ke database: $e');
+    }
   }
 
   Future<void> _fetchCircleLocations() async {
@@ -64,7 +127,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _membersLocationData = {
-            // Memastikan key berupa int agar cocok saat pencarian member.userId
             for (var loc in locations)
               int.parse(loc['user_id'].toString()): loc,
           };
@@ -178,7 +240,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter: defaultCenter,
+                initialCenter:
+                    _myCurrentLocation, // Menggunakan lokasi saat ini
                 initialZoom: 11,
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all,
@@ -190,7 +253,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   userAgentPackageName: 'com.wheretf.app',
                   maxZoom: 19,
                 ),
-                // --- Menampilkan Titik Lokasi Pengguna ---
                 MarkerLayer(markers: liveMarkers),
               ],
             ),
@@ -344,7 +406,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMyLocationButton() {
     return GestureDetector(
       onTap: () {
-        _mapController.move(defaultCenter, 11);
+        // Sekarang tombol ini akan menyorot petanya ke lokasimu yang asli
+        _mapController.move(_myCurrentLocation, 14.5);
       },
       child: Container(
         width: 48,
