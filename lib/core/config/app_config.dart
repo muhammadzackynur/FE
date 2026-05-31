@@ -1,7 +1,7 @@
 class AppConfig {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://flier-pueblo-tribunal.ngrok-free.dev/api',
+    defaultValue: 'http://192.168.1.84:8000/api',
   );
 
   static const bool isMidtransProduction = bool.fromEnvironment(

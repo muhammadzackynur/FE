@@ -1,8 +1,7 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../data/services/circle_service.dart';
 import 'invite_code_screen.dart';
 
 class CreateCircleScreen extends StatefulWidget {
@@ -14,6 +13,9 @@ class CreateCircleScreen extends StatefulWidget {
 
 class _CreateCircleScreenState extends State<CreateCircleScreen> {
   final TextEditingController circleNameController = TextEditingController();
+  final CircleService _circleService = CircleService();
+
+  bool _isLoading = false;
 
   final Color darkBrown = const Color(0xFF5B4D41);
   final Color bgCream = const Color(0xFFFFF8F0);
@@ -35,39 +37,50 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
     super.dispose();
   }
 
-  String generateInviteCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
-
-    return List.generate(
-      4,
-      (_) => chars[random.nextInt(chars.length)],
-    ).join();
-  }
-
-  void createCircle() {
+  // --- FUNGSI CREATE CIRCLE YANG SUDAH DIPERBAIKI ---
+  Future<void> createCircle() async {
     final circleName = circleNameController.text.trim();
 
     if (circleName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Circle name cannot be empty'),
-        ),
+        const SnackBar(content: Text('Circle name cannot be empty')),
       );
       return;
     }
 
-    final code = generateInviteCode();
+    setState(() {
+      _isLoading = true;
+    });
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => InviteCodeScreen(
-          circleName: circleName,
-          inviteCode: code,
+    try {
+      // 1. Panggil API ke backend
+      final result = await _circleService.createCircle(circleName);
+
+      if (!mounted) return;
+
+      // 2. Ambil referal_code asli dari backend dan pindah halaman
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) => InviteCodeScreen(
+                circleName: result.circle.name ?? circleName,
+                inviteCode: result.circle.referalCode, // Code dari database
+              ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal membuat circle: ${e.toString()}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -112,10 +125,8 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
             TextField(
               controller: circleNameController,
               maxLength: 25,
-              style: GoogleFonts.inter(
-                color: darkBrown,
-                fontSize: 14,
-              ),
+              enabled: !_isLoading,
+              style: GoogleFonts.inter(color: darkBrown, fontSize: 14),
               decoration: InputDecoration(
                 counterText: '',
                 hintText: 'e.g. Family, Work Team, Close Friends...',
@@ -131,15 +142,11 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(11),
-                  borderSide: const BorderSide(
-                    color: Color(0xFFE6D3BC),
-                  ),
+                  borderSide: const BorderSide(color: Color(0xFFE6D3BC)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(11),
-                  borderSide: BorderSide(
-                    color: darkBrown,
-                  ),
+                  borderSide: BorderSide(color: darkBrown),
                 ),
               ),
             ),
@@ -149,18 +156,12 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                 Expanded(
                   child: Text(
                     'This name will be visible to all circle members',
-                    style: GoogleFonts.inter(
-                      color: textLight,
-                      fontSize: 11,
-                    ),
+                    style: GoogleFonts.inter(color: textLight, fontSize: 11),
                   ),
                 ),
                 Text(
                   '${circleNameController.text.length}/25',
-                  style: GoogleFonts.inter(
-                    color: textLight,
-                    fontSize: 11,
-                  ),
+                  style: GoogleFonts.inter(color: textLight, fontSize: 11),
                 ),
               ],
             ),
@@ -199,7 +200,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: createCircle,
+                onPressed: _isLoading ? null : createCircle,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: darkBrown,
                   elevation: 0,
@@ -207,14 +208,24 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                     borderRadius: BorderRadius.circular(11),
                   ),
                 ),
-                child: Text(
-                  'Create Circle',
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                child:
+                    _isLoading
+                        ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : Text(
+                          'Create Circle',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
               ),
             ),
           ],

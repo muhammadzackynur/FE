@@ -14,7 +14,18 @@ class CircleService {
 
   final ApiClient _apiClient;
 
-  // --- FUNGSI BARU: Mengirim lokasi perangkat saat ini ke backend ---
+  // --- FUNGSI BARU: Membuat circle baru ke backend ---
+  Future<CircleActionResult> createCircle(String name) async {
+    final response = await _apiClient.post(
+      '/circles',
+      body: {'name': name},
+      requiresAuth: true,
+    );
+
+    return _parseResult(response);
+  }
+
+  // --- Mengirim lokasi perangkat saat ini ke backend ---
   Future<void> updateMyLocation(
     double latitude,
     double longitude,
@@ -27,7 +38,7 @@ class CircleService {
     );
   }
 
-  // --- FUNGSI BARU: Mengambil seluruh data lokasi anggota di satu circle ---
+  // --- Mengambil seluruh data lokasi anggota di satu circle ---
   Future<List<dynamic>> getCircleLocations(int circleId) async {
     final response = await _apiClient.get(
       '/circles/$circleId/locations',
