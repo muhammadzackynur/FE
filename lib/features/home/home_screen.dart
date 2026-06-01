@@ -171,53 +171,84 @@ class _HomeScreenState extends State<HomeScreen> {
         final double lng = double.tryParse(loc['longitude'].toString()) ?? 0.0;
         final bool isOnline = loc['status'] == 'online';
 
-        liveMarkers.add(
-          Marker(
-            point: LatLng(lat, lng),
-            width: 50,
-            height: 60,
-            alignment: Alignment.topCenter,
-            child: GestureDetector(
-              onTap: () => _openMemberHistory(member),
-              child: Column(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isOnline ? const Color(0xFF67A843) : Colors.grey,
-                        width: 2.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
+        if (isOnline) {
+          // Jika ONLINE: Tampilkan ikon foto profil / UserAvatar
+          liveMarkers.add(
+            Marker(
+              point: LatLng(lat, lng),
+              width: 50,
+              height: 60,
+              alignment: Alignment.topCenter,
+              child: GestureDetector(
+                onTap: () => _openMemberHistory(member),
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(
+                            0xFF67A843,
+                          ), // Hijau penanda online
+                          width: 2.5,
                         ),
-                      ],
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: UserAvatar(
+                        user: member.user,
+                        radius: 18,
+                        backgroundColor:
+                            member.hasOwnerRole
+                                ? const Color(0xFFD8B36A)
+                                : const Color(0xFF8FC7D4),
+                        foregroundColor: darkBrown,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    child: UserAvatar(
-                      user: member.user,
-                      radius: 18,
-                      backgroundColor:
-                          member.hasOwnerRole
-                              ? const Color(0xFFD8B36A)
-                              : const Color(0xFF8FC7D4),
-                      foregroundColor: darkBrown,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                    const Icon(
+                      Icons.arrow_drop_down,
+                      color: Colors.black87,
+                      size: 16,
                     ),
-                  ),
-                  const Icon(
-                    Icons.arrow_drop_down,
-                    color: Colors.black87,
-                    size: 16,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        );
+          );
+        } else {
+          // Jika OFFLINE: Ikon avatar menghilang, diganti titik abu-abu penanda lokasi terakhir
+          liveMarkers.add(
+            Marker(
+              point: LatLng(lat, lng),
+              width: 14,
+              height: 14,
+              child: GestureDetector(
+                onTap: () => _openMemberHistory(member),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade600,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
       }
     }
 
