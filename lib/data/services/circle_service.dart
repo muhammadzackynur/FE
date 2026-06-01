@@ -143,13 +143,15 @@ class CircleService {
     final nestedCircle =
         _asMap(map['circle']) ??
         _asMap(map['current_circle']) ??
-        _asMap(map['active_circle']);
+        _asMap(map['active_circle']) ??
+        _asMap(map['default_circle']) ??
+        _asMap(map['own_circle']);
 
     if (nestedCircle != null) {
       return nestedCircle;
     }
 
-    if (map.containsKey('id')) {
+    if (map.containsKey('id') || map.containsKey('circle_id')) {
       return map;
     }
 

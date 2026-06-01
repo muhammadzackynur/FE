@@ -100,8 +100,11 @@ class SessionController extends ChangeNotifier {
         return false;
       }
 
-      final user = await _authService.getCurrentUser();
-      _currentUser = user;
+      final authSession = await _authService.getCurrentUser();
+      _currentUser = authSession.user;
+      if (authSession.currentCircle != null) {
+        _currentCircle = authSession.currentCircle;
+      }
       await refreshCircleMembers(allowFailure: true);
       await refreshSubscription(allowFailure: true);
       return true;
@@ -123,9 +126,12 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _authService.login(email, password);
-      _currentUser = user;
+      var authSession = await _authService.login(email, password);
+      authSession = await _hydrateAuthSession(authSession);
+      _currentUser = authSession.user;
+      await _applyAuthCircle(authSession.currentCircle);
       _clearCircleMembersState();
+      await refreshCircleMembers(allowFailure: true);
       await refreshSubscription(allowFailure: true);
       notifyListeners();
     } finally {
@@ -145,15 +151,18 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _authService.register(
+      var authSession = await _authService.register(
         name,
         email,
         password,
         passwordConfirmation,
         phone,
       );
-      _currentUser = user;
+      authSession = await _hydrateAuthSession(authSession);
+      _currentUser = authSession.user;
+      await _applyAuthCircle(authSession.currentCircle);
       _clearCircleMembersState();
+      await refreshCircleMembers(allowFailure: true);
       await refreshSubscription(allowFailure: true);
       notifyListeners();
     } finally {
@@ -431,6 +440,28 @@ class SessionController extends ChangeNotifier {
     await _authService.clearLocalSession();
     _clearSessionState();
     notifyListeners();
+  }
+
+  Future<AuthSession> _hydrateAuthSession(AuthSession authSession) async {
+    if (authSession.currentCircle != null) {
+      return authSession;
+    }
+
+    try {
+      return await _authService.getCurrentUser();
+    } on ApiException {
+      return authSession;
+    }
+  }
+
+  Future<void> _applyAuthCircle(CircleSummary? circle) async {
+    _currentCircle = circle;
+    if (circle == null) {
+      await _authStorage.deleteCurrentCircle();
+      return;
+    }
+
+    await _authStorage.saveCurrentCircle(circle);
   }
 
   void _clearSessionState() {
