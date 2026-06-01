@@ -40,12 +40,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-
-    _sendMyLocation();
     _fetchCircleLocations();
 
     _locationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _sendMyLocation();
       _fetchCircleLocations();
     });
   }

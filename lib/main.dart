@@ -86,7 +86,7 @@ class _LocationTrackerAppState extends State<LocationTrackerApp>
 
         // Kirim API Update Location ke Laravel
         await ApiClient().post(
-          '/locations/update',
+          '/location', // <--- SUDAH DIPERBAIKI MENJADI '/location'
           body: {
             'latitude': position.latitude,
             'longitude': position.longitude,
