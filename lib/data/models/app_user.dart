@@ -8,6 +8,8 @@ class AppUser {
     this.phone,
     this.photo,
     this.photoUrl,
+    this.referalCode,
+    this.circleId,
   });
 
   final int id;
@@ -16,6 +18,8 @@ class AppUser {
   final String? phone;
   final String? photo;
   final String? photoUrl;
+  final String? referalCode;
+  final int? circleId;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
@@ -26,6 +30,15 @@ class AppUser {
       photo: json['photo']?.toString(),
       photoUrl: (json['photo_url'] ?? json['photoUrl'] ?? json['avatar_url'])
           ?.toString(),
+      referalCode: (json['referal_code'] ??
+              json['referral_code'] ??
+              json['invite_code'])
+          ?.toString(),
+      circleId: _parseNullableId(
+        json['circle_id'] ??
+            json['current_circle_id'] ??
+            json['default_circle_id'],
+      ),
     );
   }
 
@@ -37,6 +50,8 @@ class AppUser {
       'phone': phone,
       'photo': photo,
       'photo_url': photoUrl,
+      'referal_code': referalCode,
+      'circle_id': circleId,
     };
   }
 
@@ -78,6 +93,14 @@ class AppUser {
     }
 
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static int? _parseNullableId(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(value?.toString() ?? '');
   }
 
   static String? _clean(String? value) {

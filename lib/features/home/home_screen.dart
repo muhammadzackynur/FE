@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/widgets/user_avatar.dart';
+import '../../data/models/app_user.dart';
 import '../../data/models/circle_member.dart';
 import '../../data/models/circle_summary.dart';
 import '../../data/services/circle_service.dart';
@@ -143,6 +145,137 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _copyInviteCode(CircleSummary circle) {
+    return _copyInviteCodeText(circle.referalCode);
+  }
+
+  Future<void> _copyInviteCodeText(String code) {
+    return _copyText(
+      code,
+      'Kode invite berhasil disalin.',
+    );
+  }
+
+  Future<void> _copyInviteMessageText(String message) {
+    return _copyText(
+      message,
+      'Teks undangan berhasil disalin.',
+    );
+  }
+
+  Future<void> _copyText(String text, String message) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _showInviteShareSheet(CircleSummary circle) {
+    _showInviteShareSheetContent(_inviteMessage(circle));
+  }
+
+  void _showInviteShareSheetForCode({
+    required String name,
+    required String code,
+  }) {
+    _showInviteShareSheetContent(_inviteMessageForCode(name, code));
+  }
+
+  void _showInviteShareSheetContent(String message) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: lightCream,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(22, 16, 22, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD2BFA9),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Bagikan Circle',
+                style: GoogleFonts.inter(
+                  color: darkBrown,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.58),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFE4D6C7),
+                  ),
+                ),
+                child: Text(
+                  message,
+                  style: GoogleFonts.inter(
+                    color: darkBrown,
+                    fontSize: 13,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _copyInviteMessageText(message);
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text('Salin Teks Undangan'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: darkBrown,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _inviteMessage(CircleSummary circle) {
+    return _inviteMessageForCode(circle.displayName, circle.referalCode);
+  }
+
+  String _inviteMessageForCode(String name, String code) {
+    return 'Yuk join circle $name di WhereTF?. Masukkan kode invite: $code';
   }
 
   @override
@@ -312,7 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 22),
                     currentCircle == null
-                        ? _buildEmptyCircleCard()
+                        ? _buildEmptyCircleCard(session.currentUser)
                         : _buildCurrentCircleCard(currentCircle),
                     const SizedBox(height: 22),
                     _buildPeopleSection(session),
@@ -445,7 +578,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildEmptyCircleCard() {
+  Widget _buildEmptyCircleCard(AppUser? user) {
+    final userInviteCode = user?.referalCode?.trim();
+    if (userInviteCode != null && userInviteCode.isNotEmpty) {
+      return _buildUserInviteFallbackCard(user!, userInviteCode);
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 26, 18, 22),
       decoration: BoxDecoration(
@@ -535,6 +673,147 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildUserInviteFallbackCard(AppUser user, String inviteCode) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 22, 18, 20),
+      decoration: BoxDecoration(
+        color: lightCream,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Circle kamu',
+            style: GoogleFonts.inter(
+              color: darkBrown,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Kode invite sudah tersedia. Data anggota akan muncul setelah circle tersinkron dari backend.',
+            style: GoogleFonts.inter(
+              color: textLight,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.56),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE4D6C7)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Kode invite kamu',
+                  style: GoogleFonts.inter(
+                    color: textLight,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        inviteCode,
+                        style: GoogleFonts.inter(
+                          color: darkBrown,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _copyInviteCodeText(inviteCode),
+                      icon: Icon(
+                        Icons.copy_rounded,
+                        color: darkBrown,
+                        size: 20,
+                      ),
+                      tooltip: 'Salin kode',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _copyInviteCodeText(inviteCode),
+                        icon: const Icon(Icons.copy_rounded, size: 17),
+                        label: const Text('Salin'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: darkBrown,
+                          side: BorderSide(color: darkBrown.withOpacity(0.28)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showInviteShareSheetForCode(
+                          name: user.name,
+                          code: inviteCode,
+                        ),
+                        icon: const Icon(Icons.ios_share_rounded, size: 17),
+                        label: const Text('Bagikan'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: darkBrown,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _goToJoinCircle,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: darkBrown,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                'Join circle lain',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCurrentCircleCard(CircleSummary currentCircle) {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 20),
@@ -555,17 +834,95 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Invite code: ${currentCircle.referalCode}',
-            style: GoogleFonts.inter(color: textLight, fontSize: 13),
-          ),
-          const SizedBox(height: 6),
-          Text(
             currentCircle.isOwnedBy(
                   context.read<SessionController>().currentUser?.id,
                 )
                 ? 'This is your default circle.'
                 : "You are active in another member's circle.",
             style: GoogleFonts.inter(color: textLight, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.56),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE4D6C7)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Kode invite circle',
+                  style: GoogleFonts.inter(
+                    color: textLight,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        currentCircle.referalCode,
+                        style: GoogleFonts.inter(
+                          color: darkBrown,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _copyInviteCode(currentCircle),
+                      icon: Icon(
+                        Icons.copy_rounded,
+                        color: darkBrown,
+                        size: 20,
+                      ),
+                      tooltip: 'Salin kode',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _copyInviteCode(currentCircle),
+                        icon: const Icon(Icons.copy_rounded, size: 17),
+                        label: const Text('Salin'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: darkBrown,
+                          side: BorderSide(color: darkBrown.withOpacity(0.28)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showInviteShareSheet(currentCircle),
+                        icon: const Icon(Icons.ios_share_rounded, size: 17),
+                        label: const Text('Bagikan'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: darkBrown,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 18),
           SizedBox(

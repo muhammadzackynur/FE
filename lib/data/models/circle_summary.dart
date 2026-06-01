@@ -17,10 +17,14 @@ class CircleSummary {
 
   factory CircleSummary.fromJson(Map<String, dynamic> json) {
     return CircleSummary(
-      id: _parseInt(json['id']),
-      name: json['name']?.toString(),
+      id: _parseInt(json['id'] ?? json['circle_id']),
+      name: (json['name'] ?? json['circle_name'])?.toString(),
       ownerId: _parseInt(json['owner_id'] ?? json['user_id']),
-      referalCode: (json['referal_code'] ?? '').toString(),
+      referalCode: (json['referal_code'] ??
+              json['referral_code'] ??
+              json['invite_code'] ??
+              '')
+          .toString(),
       createdAt: (json['created_at'] ?? '').toString(),
       updatedAt: (json['updated_at'] ?? '').toString(),
     );
